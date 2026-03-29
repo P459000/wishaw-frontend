@@ -1,0 +1,378 @@
+import { useState, useEffect, useRef } from 'react';
+import API from '../services/api';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const DAYS_HEADER = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
+];
+
+const toISO = (d: Date) => d.toISOString().split('T')[0];
+
+const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+const getFirstDay   = (y: number, m: number) => new Date(y, m, 1).getDay();
+
+// Expand an event across every date it spans
+const expandEventDates = (e: any): string[] => {
+  if (!e.startDate || !e.endDate) return [];
+  const dates: string[] = [];
+  const end = new Date(e.endDate);
+  for (let d = new Date(e.startDate); d <= end; d.setDate(d.getDate() + 1)) {
+    dates.push(toISO(new Date(d)));
+  }
+  return dates;
+};
+
+// Consistent colour per event (cycles through palette)
+const PALETTE = [
+  { pill: '#22c55e', bg: 'rgba(34,197,94,0.18)',   text: '#16a34a' },
+  { pill: '#8b5cf6', bg: 'rgba(139,92,246,0.18)',  text: '#7c3aed' },
+  { pill: '#ec4899', bg: 'rgba(236,72,153,0.15)',  text: '#db2777' },
+  { pill: '#f59e0b', bg: 'rgba(245,158,11,0.15)',  text: '#b45309' },
+  { pill: '#0ea5e9', bg: 'rgba(14,165,233,0.15)',  text: '#0369a1' },
+  { pill: '#ef4444', bg: 'rgba(239,68,68,0.15)',   text: '#dc2626' },
+];
+
+// ── Main Component ────────────────────────────────────────────────────────────
+interface EventCalendarProps { isAdmin?: boolean; }
+
+const EventCalendar = ({ isAdmin = false }: EventCalendarProps) => {
+  const today      = new Date();
+  const todayISO   = toISO(today);
+
+  const [events, setEvents]         = useState<any[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [viewYear, setViewYear]     = useState(today.getFullYear());
+  const [viewMonth, setViewMonth]   = useState(today.getMonth());
+  const [selectedDay, setSelectedDay] = useState<string | null>(todayISO);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    API.get('/events')
+      .then(r => setEvents(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Map ISO date → list of events
+  const dateMap: Record<string, any[]> = {};
+  events.forEach((e, idx) => {
+    expandEventDates(e).forEach(iso => {
+      if (!dateMap[iso]) dateMap[iso] = [];
+      dateMap[iso].push({ ...e, _colorIdx: idx % PALETTE.length });
+    });
+  });
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
+    else setViewMonth(m => m + 1);
+  };
+  const goToday = () => {
+    setViewYear(today.getFullYear());
+    setViewMonth(today.getMonth());
+    setSelectedDay(todayISO);
+  };
+
+  const daysInMonth  = getDaysInMonth(viewYear, viewMonth);
+  const firstDay     = getFirstDay(viewYear, viewMonth);
+  // How many rows we need
+  const totalCells   = firstDay + daysInMonth;
+  const totalRows    = Math.ceil(totalCells / 7);
+
+  const selectedEvents = selectedDay ? (dateMap[selectedDay] || []) : [];
+
+  const formatSelected = () => {
+    if (!selectedDay) return '';
+    const d = new Date(selectedDay + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  };
+
+  const MAX_VISIBLE_PILLS = totalRows <= 5 ? 3 : 2;
+
+  return (
+    <div style={{ display: 'flex', height: 'calc(100vh - 120px)', gap: 0, background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border)', overflow: 'hidden', boxShadow: '0 4px 32px rgba(0,0,0,0.10)' }}>
+
+      {/* ── LEFT: Full Calendar Grid ───────────────────────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: selectedDay ? '1px solid var(--border)' : 'none' }}>
+
+        {/* Top bar */}
+        <div style={{ padding: '20px 28px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
+            <span style={{ fontWeight: 800 }}>{MONTHS[viewMonth]}</span>{' '}
+            <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>{viewYear}</span>
+          </h2>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button onClick={prevMonth} style={{ width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-input)', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '16px', display:'flex', alignItems:'center', justifyContent:'center' }}>‹</button>
+            <button onClick={goToday} style={{ padding: '5px 18px', borderRadius: '99px', border: '1px solid var(--border)', background: 'var(--bg-input)', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>Today</button>
+            <button onClick={nextMonth} style={{ width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-input)', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '16px', display:'flex', alignItems:'center', justifyContent:'center' }}>›</button>
+          </div>
+        </div>
+
+        {/* Day-of-week header row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', padding: '16px 0 8px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          {DAYS_HEADER.map(d => (
+            <div key={d} style={{ textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Calendar grid */}
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridTemplateRows: `repeat(${totalRows}, 1fr)`, overflow: 'hidden' }}>
+          {Array.from({ length: totalRows * 7 }).map((_, cellIdx) => {
+            const dayNum  = cellIdx - firstDay + 1;
+            const valid   = dayNum >= 1 && dayNum <= daysInMonth;
+            const isoDate = valid
+              ? `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
+              : null;
+            const isToday    = isoDate === todayISO;
+            const isSelected = isoDate === selectedDay;
+            const cellEvents = isoDate ? (dateMap[isoDate] || []) : [];
+            const extraCount = cellEvents.length - MAX_VISIBLE_PILLS;
+
+            // Determine if cell is in the previous or next month area
+            const isOverflow = !valid;
+            // Adjacent month day numbers
+            let overflowDay = '';
+            if (cellIdx < firstDay) {
+              const prevTotal = getDaysInMonth(viewMonth === 0 ? viewYear - 1 : viewYear, viewMonth === 0 ? 11 : viewMonth - 1);
+              overflowDay = String(prevTotal - firstDay + cellIdx + 1);
+            } else if (dayNum > daysInMonth) {
+              overflowDay = String(dayNum - daysInMonth);
+            }
+
+            return (
+              <div
+                key={cellIdx}
+                onClick={() => isoDate && setSelectedDay(prev => prev === isoDate ? null : isoDate)}
+                style={{
+                  borderRight: '1px solid var(--border)',
+                  borderBottom: '1px solid var(--border)',
+                  padding: '6px 6px 4px',
+                  cursor: valid ? 'pointer' : 'default',
+                  background: isSelected ? 'rgba(99,102,241,0.06)' : 'transparent',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'background 0.15s',
+                  minHeight: 0,
+                }}
+              >
+                {/* Day number */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '3px' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: '24px', height: '24px', borderRadius: '50%',
+                    fontSize: isToday ? '13px' : '12px',
+                    fontWeight: isToday ? 800 : valid ? 500 : 400,
+                    color: isToday
+                      ? '#fff'
+                      : isOverflow
+                        ? 'var(--text-secondary)'
+                        : 'var(--text-primary)',
+                    background: isToday ? '#ef4444' : 'transparent',
+                    opacity: isOverflow ? 0.4 : 1,
+                  }}>
+                    {valid ? dayNum : overflowDay}
+                  </span>
+                </div>
+
+                {/* Event pills */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {cellEvents.slice(0, MAX_VISIBLE_PILLS).map((e: any) => {
+                    const { pill } = PALETTE[e._colorIdx];
+                    return (
+                      <div key={e._id} style={{
+                        display: 'flex', alignItems: 'center', gap: '4px',
+                        background: `${pill}22`,
+                        borderLeft: `3px solid ${pill}`,
+                        borderRadius: '3px',
+                        padding: '1px 5px',
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        <span style={{
+                          fontSize: '11px', fontWeight: 600,
+                          color: pill,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          maxWidth: '100%',
+                        }}>
+                          {e.eventName}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {extraCount > 0 && (
+                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600, paddingLeft: '4px' }}>
+                      +{extraCount} more
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── RIGHT: Detail Panel ────────────────────────────────────────────── */}
+      {selectedDay && (
+        <div
+          ref={panelRef}
+          style={{
+            width: '320px',
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflowY: 'auto',
+            background: 'var(--bg-input)',
+            animation: 'slideInFromRight 0.22s cubic-bezier(0.16,1,0.3,1) both',
+          }}
+        >
+          {/* Panel header */}
+          <div style={{ padding: '24px 20px 16px', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, background: 'var(--bg-input)', zIndex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <p style={{ margin: '0 0 2px', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' })}
+                </p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                  <span style={{
+                    fontSize: '48px', fontWeight: 800, lineHeight: 1,
+                    color: selectedDay === todayISO ? '#ef4444' : 'var(--text-primary)',
+                  }}>
+                    {new Date(selectedDay + 'T12:00:00').getDate()}
+                  </span>
+                  <span style={{ fontSize: '16px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    {new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+              <button onClick={() => setSelectedDay(null)} style={{
+                background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px',
+                color: 'var(--text-secondary)', padding: '4px', lineHeight: 1,
+              }}>✕</button>
+            </div>
+
+            <p style={{ margin: '10px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              {selectedEvents.length === 0
+                ? 'No events on this day'
+                : `${selectedEvents.length} ${selectedEvents.length === 1 ? 'event' : 'events'}`}
+            </p>
+          </div>
+
+          {/* Event cards */}
+          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {loading ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Loading…</div>
+            ) : selectedEvents.length === 0 ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center' }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>📭</div>
+                <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)', fontWeight: 500 }}>No events scheduled</p>
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Dates with events show coloured pills on the calendar
+                </p>
+              </div>
+            ) : (
+              selectedEvents.map((e: any, idx: number) => {
+                const { pill, bg } = PALETTE[e._colorIdx];
+                const assignedCount = Array.isArray(e.assignedStaff) ? e.assignedStaff.length : 0;
+                const isFull = assignedCount >= e.personsNeeded;
+
+                return (
+                  <div key={e._id + idx} style={{
+                    background: 'var(--bg-card)',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border)',
+                    overflow: 'hidden',
+                    animation: `slideUp 0.2s ease ${idx * 0.06}s both`,
+                  }}>
+                    {/* Accent bar */}
+                    <div style={{ height: '5px', background: `linear-gradient(90deg, ${pill}, ${pill}88)` }} />
+
+                    <div style={{ padding: '14px 16px' }}>
+                      {/* Title + status */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                          {e.eventName}
+                        </h4>
+                        {isAdmin && (
+                          <span style={{
+                            padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: 700,
+                            background: isFull ? 'rgba(34,197,94,0.12)' : 'rgba(234,179,8,0.12)',
+                            color: isFull ? '#16a34a' : '#ca8a04',
+                            marginLeft: '6px', whiteSpace: 'nowrap', flexShrink: 0,
+                          }}>
+                            {isFull ? '✓ Staffed' : '⚠ Open'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Location */}
+                      <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>📍</span> {e.location}
+                      </p>
+
+                      {/* Metadata chips */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                        {[
+                          { icon: '🕐', label: `${e.hours} hrs` },
+                          { icon: '📅', label: `${e.startDate} → ${e.endDate}` },
+                          { icon: '👥', label: `${assignedCount} / ${e.personsNeeded} staff` },
+                        ].map(chip => (
+                          <span key={chip.label} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                            padding: '3px 9px', borderRadius: '99px',
+                            background: bg, color: pill,
+                            fontSize: '11px', fontWeight: 600,
+                            border: `1px solid ${pill}33`,
+                          }}>
+                            {chip.icon} {chip.label}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Qualifications */}
+                      {e.qualifications?.length > 0 && (
+                        <div>
+                          <p style={{ margin: '0 0 5px', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Required Skills
+                          </p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {e.qualifications.map((q: string) => (
+                              <span key={q} style={{
+                                padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600,
+                                background: 'var(--bg-input)', color: 'var(--text-secondary)', border: '1px solid var(--border)',
+                              }}>
+                                {q}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Slide-in animation */}
+      <style>{`
+        @keyframes slideInFromRight {
+          from { opacity: 0; transform: translateX(30px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default EventCalendar;
