@@ -32,9 +32,14 @@ const AdminDashboardLayout = () => {
   };
 
   const menuItems = [
-    { label: 'Staff Management', path: '/admin/dashboard/staff' },
-    { label: 'Event Creation', path: '/admin/dashboard/events' },
-    { label: 'Event Calendar', path: '/admin/dashboard/calendar' },
+    { label: '🏠 Dashboard', path: '/admin/dashboard' },
+    { label: '👥 Staff Management', path: '/admin/dashboard/staff' },
+    { label: '🧒 Student Management', path: '/admin/dashboard/students' },
+    { label: '📝 Staff Onboarding', path: '/admin/dashboard/onboarding' },
+    { label: '📅 Session Management', path: '/admin/dashboard/events' },
+    { label: '🗓️ Calendar', path: '/admin/dashboard/calendar' },
+    { label: '📊 Attendance', path: '/admin/dashboard/attendance' },
+    { label: '💸 Payroll', path: '/admin/dashboard/payroll' },
   ];
 
   return (

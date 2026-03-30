@@ -418,7 +418,8 @@ body {
 .dashboard-layout {
   display: grid;
   grid-template-columns: 240px 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg-page);
   transition: grid-template-columns 0.3s ease, background 0.3s ease;
 }
@@ -500,10 +501,13 @@ body {
 .dashboard-main {
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .dashboard-header {
   height: 80px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;

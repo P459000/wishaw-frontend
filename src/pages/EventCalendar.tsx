@@ -14,14 +14,18 @@ const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate()
 const getFirstDay   = (y: number, m: number) => new Date(y, m, 1).getDay();
 
 // Expand an event across every date it spans
+// For single-day events (current model), this is just the event date.
 const expandEventDates = (e: any): string[] => {
-  if (!e.startDate || !e.endDate) return [];
-  const dates: string[] = [];
-  const end = new Date(e.endDate);
-  for (let d = new Date(e.startDate); d <= end; d.setDate(d.getDate() + 1)) {
-    dates.push(toISO(new Date(d)));
+  if (e.date) return [e.date]; // New model uses 'date'
+  if (e.startDate && e.endDate) { // Fallback for legacy DB entries if they exist
+    const dates: string[] = [];
+    const end = new Date(e.endDate);
+    for (let d = new Date(e.startDate); d <= end; d.setDate(d.getDate() + 1)) {
+      dates.push(toISO(new Date(d)));
+    }
+    return dates;
   }
-  return dates;
+  return [];
 };
 
 // Consistent colour per event (cycles through palette)
@@ -33,6 +37,19 @@ const PALETTE = [
   { pill: '#0ea5e9', bg: 'rgba(14,165,233,0.15)',  text: '#0369a1' },
   { pill: '#ef4444', bg: 'rgba(239,68,68,0.15)',   text: '#dc2626' },
 ];
+
+const getEventStatus = (e: any): 'YET_TO_START' | 'ONGOING' | 'COMPLETED' => {
+  if (e.isManuallyCompleted) return 'COMPLETED';
+  if (!e.date || !e.startTime || !e.endTime) return 'YET_TO_START';
+
+  const now = new Date();
+  const startObj = new Date(`${e.date}T${e.startTime}:00`);
+  const endObj = new Date(`${e.date}T${e.endTime}:00`);
+
+  if (now < startObj) return 'YET_TO_START';
+  if (now > endObj) return 'COMPLETED';
+  return 'ONGOING';
+};
 
 // ── Main Component ────────────────────────────────────────────────────────────
 interface EventCalendarProps { isAdmin?: boolean; }
@@ -85,12 +102,6 @@ const EventCalendar = ({ isAdmin = false }: EventCalendarProps) => {
   const totalRows    = Math.ceil(totalCells / 7);
 
   const selectedEvents = selectedDay ? (dateMap[selectedDay] || []) : [];
-
-  const formatSelected = () => {
-    if (!selectedDay) return '';
-    const d = new Date(selectedDay + 'T12:00:00');
-    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  };
 
   const MAX_VISIBLE_PILLS = totalRows <= 5 ? 3 : 2;
 
@@ -282,7 +293,8 @@ const EventCalendar = ({ isAdmin = false }: EventCalendarProps) => {
               selectedEvents.map((e: any, idx: number) => {
                 const { pill, bg } = PALETTE[e._colorIdx];
                 const assignedCount = Array.isArray(e.assignedStaff) ? e.assignedStaff.length : 0;
-                const isFull = assignedCount >= e.personsNeeded;
+                const totalNeeded = (e.requiredYouthWorkers || 0) + (e.requiredSessionSupport || 0);
+                const isFull = assignedCount >= totalNeeded && totalNeeded > 0;
 
                 return (
                   <div key={e._id + idx} style={{
@@ -301,16 +313,26 @@ const EventCalendar = ({ isAdmin = false }: EventCalendarProps) => {
                         <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
                           {e.eventName}
                         </h4>
-                        {isAdmin && (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          {isAdmin && (
+                            <span style={{
+                              padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: 700,
+                              background: isFull ? 'rgba(34,197,94,0.12)' : 'rgba(234,179,8,0.12)',
+                              color: isFull ? '#16a34a' : '#ca8a04',
+                              marginLeft: '6px', whiteSpace: 'nowrap', flexShrink: 0,
+                            }}>
+                              {isFull ? '✓ Staffed' : '⚠ Open'}
+                            </span>
+                          )}
                           <span style={{
                             padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: 700,
-                            background: isFull ? 'rgba(34,197,94,0.12)' : 'rgba(234,179,8,0.12)',
-                            color: isFull ? '#16a34a' : '#ca8a04',
+                            background: getEventStatus(e) === 'COMPLETED' ? 'rgba(100,100,100,0.1)' : getEventStatus(e) === 'ONGOING' ? 'rgba(14,165,233,0.1)' : 'rgba(156,163,175,0.1)',
+                            color: getEventStatus(e) === 'COMPLETED' ? '#6b7280' : getEventStatus(e) === 'ONGOING' ? '#0284c7' : '#9ca3af',
                             marginLeft: '6px', whiteSpace: 'nowrap', flexShrink: 0,
                           }}>
-                            {isFull ? '✓ Staffed' : '⚠ Open'}
+                            {getEventStatus(e) === 'COMPLETED' ? '🏁 Completed' : getEventStatus(e) === 'ONGOING' ? '▶️ Ongoing' : '⏳ Yet to Start'}
                           </span>
-                        )}
+                        </div>
                       </div>
 
                       {/* Location */}
@@ -321,9 +343,8 @@ const EventCalendar = ({ isAdmin = false }: EventCalendarProps) => {
                       {/* Metadata chips */}
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
                         {[
-                          { icon: '🕐', label: `${e.hours} hrs` },
-                          { icon: '📅', label: `${e.startDate} → ${e.endDate}` },
-                          { icon: '👥', label: `${assignedCount} / ${e.personsNeeded} staff` },
+                          { icon: '🕐', label: `${e.startTime || '?'} - ${e.endTime || '?'}` },
+                          { icon: '👥', label: `${assignedCount} / ${totalNeeded} staff (${e.requiredYouthWorkers || 0} YW, ${e.requiredSessionSupport || 0} SS)` },
                         ].map(chip => (
                           <span key={chip.label} style={{
                             display: 'inline-flex', alignItems: 'center', gap: '3px',
@@ -337,21 +358,24 @@ const EventCalendar = ({ isAdmin = false }: EventCalendarProps) => {
                         ))}
                       </div>
 
-                      {/* Qualifications */}
-                      {e.qualifications?.length > 0 && (
-                        <div>
-                          <p style={{ margin: '0 0 5px', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                            Required Skills
+                      {/* Assigned Staff */}
+                      {e.assignedStaff?.length > 0 && (
+                        <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+                          <p style={{ margin: '0 0 6px', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Assigned Staff
                           </p>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                            {e.qualifications.map((q: string) => (
-                              <span key={q} style={{
-                                padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600,
-                                background: 'var(--bg-input)', color: 'var(--text-secondary)', border: '1px solid var(--border)',
-                              }}>
-                                {q}
-                              </span>
-                            ))}
+                            {e.assignedStaff.map((staff: any) => {
+                              const name = typeof staff === 'string' ? staff : `${staff.firstName} ${staff.lastName}`;
+                              return (
+                                <span key={typeof staff === 'string' ? staff : staff._id} style={{
+                                  padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
+                                  background: 'var(--bg-input)', color: 'var(--text-primary)', border: '1px solid var(--border)',
+                                }}>
+                                  👤 {name}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
