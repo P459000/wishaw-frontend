@@ -466,6 +466,17 @@ const StaffManagement = () => {
     }
   };
 
+  const handleUnlockSession = async () => {
+    if (!selectedSessionId) return;
+    try {
+      await API.put(`/events/${selectedSessionId}`, { isManuallyCompleted: false });
+      await fetchEvents();
+    } catch (err) {
+      alert('Failed to unlock session for editing.');
+      console.error(err);
+    }
+  };
+
   // ─── ASSIGNMENT ENGINE LOGIC ───
   const eventsInRange = events.filter(e => {
     if (selectedDate) return e.date === selectedDate;
@@ -695,9 +706,16 @@ const StaffManagement = () => {
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
-                    <button onClick={handleSaveAssignments} className="btn-primary" disabled={savingAssignment || (!rulesPassed && !adminOverride) || selectedSession.isManuallyCompleted}>
-                      {selectedSession.isManuallyCompleted ? 'Session Completed' : (savingAssignment ? 'Saving...' : 'Save Assignments')}
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={handleSaveAssignments} className="btn-primary" disabled={savingAssignment || (!rulesPassed && !adminOverride) || selectedSession.isManuallyCompleted}>
+                        {selectedSession.isManuallyCompleted ? 'Session Completed' : (savingAssignment ? 'Saving...' : 'Save Assignments')}
+                      </button>
+                      {selectedSession.isManuallyCompleted && (
+                        <button onClick={handleUnlockSession} style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}>
+                          ✏️ Edit
+                        </button>
+                      )}
+                    </div>
                     {!rulesPassed && !selectedSession.isManuallyCompleted && (
                       <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-error)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                         <input type="checkbox" checked={adminOverride} onChange={e => setAdminOverride(e.target.checked)} />
