@@ -455,8 +455,9 @@ const StaffManagement = () => {
     setSavingAssignment(true);
     try {
       await API.patch(`/events/${selectedSessionId}/staff`, { staffIds: assignmentDraft });
+      await API.put(`/events/${selectedSessionId}`, { isManuallyCompleted: true });
       await fetchEvents();
-      alert('Staff successfully assigned to session!');
+      alert('Staff successfully assigned to session and session marked as completed!');
     } catch (err) {
       alert('Failed to save assignments.');
       console.error(err);
@@ -476,7 +477,7 @@ const StaffManagement = () => {
   // Sync draft IDs when selecting a new session
   useEffect(() => {
     if (selectedSession) {
-      setAssignmentDraft(selectedSession.assignedStaff || []);
+      setAssignmentDraft((selectedSession.assignedStaff || []).map((s: any) => typeof s === 'string' ? s : s._id));
     } else {
       setAssignmentDraft([]);
     }
@@ -694,10 +695,10 @@ const StaffManagement = () => {
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
-                    <button onClick={handleSaveAssignments} className="btn-primary" disabled={savingAssignment || (!rulesPassed && !adminOverride)}>
-                      {savingAssignment ? 'Saving...' : 'Save Assignments'}
+                    <button onClick={handleSaveAssignments} className="btn-primary" disabled={savingAssignment || (!rulesPassed && !adminOverride) || selectedSession.isManuallyCompleted}>
+                      {selectedSession.isManuallyCompleted ? 'Session Completed' : (savingAssignment ? 'Saving...' : 'Save Assignments')}
                     </button>
-                    {!rulesPassed && (
+                    {!rulesPassed && !selectedSession.isManuallyCompleted && (
                       <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-error)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                         <input type="checkbox" checked={adminOverride} onChange={e => setAdminOverride(e.target.checked)} />
                         Override Strict Constraints
@@ -719,11 +720,12 @@ const StaffManagement = () => {
                       <tr key={u._id} style={{ background: isChecked ? 'rgba(99,102,241,0.05)' : '' }}>
                         <td>
                           <input type="checkbox" checked={isChecked}
+                            disabled={selectedSession.isManuallyCompleted}
                             onChange={(e) => {
                               if (e.target.checked) setAssignmentDraft([...assignmentDraft, u._id]);
                               else setAssignmentDraft(assignmentDraft.filter(id => id !== u._id));
                             }}
-                            style={{ width: '18px', height: '18px', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                            style={{ width: '18px', height: '18px', accentColor: 'var(--accent)', cursor: selectedSession.isManuallyCompleted ? 'not-allowed' : 'pointer', opacity: selectedSession.isManuallyCompleted ? 0.5 : 1 }}
                           />
                         </td>
                         <td><strong style={{ color: 'var(--text-primary)' }}>{u.firstName} {u.lastName}</strong></td>

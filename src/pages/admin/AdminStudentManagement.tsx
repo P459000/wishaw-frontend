@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import API from '../../services/api';
+import AdminStudentOnboardingModal from './AdminStudentOnboardingModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -127,6 +128,27 @@ const AdminStudentManagement = () => {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [onboardingEventId, setOnboardingEventId] = useState<string | null>(null);
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+
+  const fetchAll = async () => {
+    try {
+      const [studentsRes, eventsRes] = await Promise.all([
+        API.get('/students'),
+        API.get('/events')
+      ]);
+      setStudents(studentsRes.data);
+      setEvents(eventsRes.data);
+      const sorted = studentsRes.data.sort((a: any, b: any) => 
+        a.child.firstName.localeCompare(b.child.firstName)
+      );
+      setFiltered(sorted);
+      if (sorted.length > 0) setSelected(sorted[0]);
+    } catch {
+      setError('Failed to load data. Make sure you are logged in as admin.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const isStudentOnboarded = (event: any): boolean => {
     if (!selected) return false;
@@ -164,25 +186,6 @@ const AdminStudentManagement = () => {
   };
 
   useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        const [studentsRes, eventsRes] = await Promise.all([
-          API.get('/students'),
-          API.get('/events')
-        ]);
-        setStudents(studentsRes.data);
-        setEvents(eventsRes.data);
-        const sorted = studentsRes.data.sort((a: any, b: any) => 
-          a.child.firstName.localeCompare(b.child.firstName)
-        );
-        setFiltered(sorted);
-        if (sorted.length > 0) setSelected(sorted[0]);
-      } catch {
-        setError('Failed to load data. Make sure you are logged in as admin.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchAll();
   }, []);
 
@@ -222,6 +225,18 @@ const AdminStudentManagement = () => {
 
       {/* ── Left: List panel ────────────────────────────────────────────────── */}
       <div style={{ flex: '0 0 380px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+        {/* Header Action */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>Student Directory</h3>
+          <button onClick={() => setShowOnboardingModal(true)} style={{
+            background: 'var(--accent)', color: '#fff', border: 'none', padding: '6px 14px',
+            borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+            boxShadow: '0 2px 4px rgba(99,102,241,0.3)'
+          }}>
+            + New Student
+          </button>
+        </div>
 
         {/* Stats bar */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
@@ -616,6 +631,13 @@ const AdminStudentManagement = () => {
           </div>
         )}
       </div>
+      {/* Modals */}
+      {showOnboardingModal && (
+        <AdminStudentOnboardingModal
+          onClose={() => setShowOnboardingModal(false)}
+          onSaved={fetchAll}
+        />
+      )}
     </div>
   );
 };
