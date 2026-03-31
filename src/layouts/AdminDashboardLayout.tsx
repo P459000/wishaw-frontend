@@ -32,14 +32,14 @@ const AdminDashboardLayout = () => {
   };
 
   const menuItems = [
-    { label: '🏠 Dashboard', path: '/admin/dashboard' },
-    { label: '👥 Staff Management', path: '/admin/dashboard/staff' },
-    { label: '🧒 Student Management', path: '/admin/dashboard/students' },
-    { label: '📝 Staff Onboarding', path: '/admin/dashboard/onboarding' },
-    { label: '📅 Session Management', path: '/admin/dashboard/events' },
-    { label: '🗓️ Calendar', path: '/admin/dashboard/calendar' },
-    { label: '📊 Attendance', path: '/admin/dashboard/attendance' },
-    { label: '💸 Payroll', path: '/admin/dashboard/payroll' },
+    { label: '🏠 Dashboard',              path: '/admin/dashboard' },
+    { label: '📅 Session Management',     path: '/admin/dashboard/events' },
+    { label: '📝 Staff Onboarding',       path: '/admin/dashboard/onboarding' },
+    { label: '👥 Staff Info & Approvals', path: '/admin/dashboard/staff' },
+    { label: '🧒 Student Management',     path: '/admin/dashboard/students' },
+    { label: '🗓️ Calendar',              path: '/admin/dashboard/calendar' },
+    { label: '📊 Attendance',             path: '/admin/dashboard/attendance' },
+    { label: '💸 Payroll',               path: '/admin/dashboard/payroll' },
   ];
 
   return (
@@ -52,9 +52,13 @@ const AdminDashboardLayout = () => {
 
       {/* Sidebar */}
       <aside className={`sidebar ${isMobileOpen ? 'mobile-open' : ''}`} style={{ backgroundColor: 'var(--bg-input)' }}>
-        <div className="sidebar-header">
-          <div className="auth-logo-icon" style={{ width: 32, height: 32, fontSize: 16 }}>🛡️</div>
-          <span className="auth-logo-text" style={{ color: 'var(--error)' }}>Admin</span>
+        <div className="sidebar-header" style={{ gap: '10px' }}>
+          <img
+            src="/oyci-logo.png"
+            alt="OYCI"
+            style={{ height: '36px', width: 'auto', objectFit: 'contain', flexShrink: 0 }}
+          />
+          <span className="auth-logo-text" style={{ color: '#ec4899', fontSize: '13px', fontWeight: 800, letterSpacing: '0.03em' }}>Admin Portal</span>
         </div>
 
         <nav className="sidebar-nav">

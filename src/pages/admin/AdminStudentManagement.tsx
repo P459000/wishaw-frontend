@@ -126,6 +126,42 @@ const AdminStudentManagement = () => {
   const [eventFilterMode, setEventFilterMode] = useState<'All' | 'Previous Week' | 'This Week' | 'Upcoming Week' | 'Custom'>('This Week');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [onboardingEventId, setOnboardingEventId] = useState<string | null>(null);
+
+  const isStudentOnboarded = (event: any): boolean => {
+    if (!selected) return false;
+    return (event.registeredFamilies || []).some(
+      (id: any) => id.toString() === selected.familyId || id.toString() === selected._id
+    );
+  };
+
+  const handleOnboard = async (eventId: string) => {
+    if (!selected) return;
+    setOnboardingEventId(eventId);
+    try {
+      await API.post(`/events/${eventId}/onboard`, { familyId: selected.familyId });
+      const { data } = await API.get('/events');
+      setEvents(data);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to onboard student');
+    } finally {
+      setOnboardingEventId(null);
+    }
+  };
+
+  const handleRemoveOnboard = async (eventId: string) => {
+    if (!selected) return;
+    setOnboardingEventId(eventId);
+    try {
+      await API.delete(`/events/${eventId}/onboard`, { data: { familyId: selected.familyId } });
+      const { data } = await API.get('/events');
+      setEvents(data);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to remove student');
+    } finally {
+      setOnboardingEventId(null);
+    }
+  };
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -506,14 +542,72 @@ const AdminStudentManagement = () => {
                       </p>;
                     }
 
-                    return filteredEvents.map(e => (
-                      <div key={e._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '10px' }}>
-                        <div>
-                          <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{e.eventName}</h4>
-                          <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>📍 {e.location} · {e.date} ({e.startTime} - {e.endTime})</p>
+                    return filteredEvents.map(e => {
+                      const onboarded = isStudentOnboarded(e);
+                      const isWorking = onboardingEventId === e._id;
+                      return (
+                        <div key={e._id} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '12px 16px',
+                          background: onboarded ? 'rgba(34,197,94,0.05)' : 'var(--bg-input)',
+                          border: `1px solid ${onboarded ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
+                          borderRadius: '10px',
+                          transition: 'all 0.2s',
+                        }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{e.eventName}</h4>
+                              {onboarded && (
+                                <span style={{
+                                  padding: '2px 8px', borderRadius: '99px', fontSize: '10px',
+                                  fontWeight: 700, background: 'rgba(34,197,94,0.15)',
+                                  color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)',
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  ✓ Onboarded
+                                </span>
+                              )}
+                            </div>
+                            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              📍 {e.location} · {e.date} · {e.startTime} – {e.endTime}
+                            </p>
+                          </div>
+                          <div style={{ flexShrink: 0, marginLeft: '12px' }}>
+                            {onboarded ? (
+                              <button
+                                onClick={() => handleRemoveOnboard(e._id)}
+                                disabled={isWorking}
+                                style={{
+                                  padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                                  border: '1px solid rgba(239,68,68,0.4)',
+                                  background: 'rgba(239,68,68,0.06)', color: '#ef4444',
+                                  cursor: isWorking ? 'not-allowed' : 'pointer',
+                                  opacity: isWorking ? 0.6 : 1,
+                                }}
+                              >
+                                {isWorking ? '…' : '✕ Remove'}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleOnboard(e._id)}
+                                disabled={isWorking}
+                                style={{
+                                  padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                                  border: 'none',
+                                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                                  color: '#fff',
+                                  cursor: isWorking ? 'not-allowed' : 'pointer',
+                                  opacity: isWorking ? 0.6 : 1,
+                                  boxShadow: '0 2px 8px rgba(99,102,241,0.25)',
+                                }}
+                              >
+                                {isWorking ? '…' : '+ Onboard'}
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ));
+                      );
+                    });
                   })()}
                 </div>
               </CollapsibleCard>

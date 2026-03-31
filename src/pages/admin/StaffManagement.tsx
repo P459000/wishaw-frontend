@@ -335,12 +335,74 @@ const getDuration = (start: string, end: string) => {
 
 
 
+// ── View Staff Modal ──────────────────────────────────────────────────────────
+const ViewStaffModal = ({ user, onClose }: { user: any; onClose: () => void }) => (
+  <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }} onClick={onClose}>
+    <div style={{ background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border)', width: '100%', maxWidth: '560px', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+      {/* Header */}
+      <div style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', padding: '28px 28px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', marginBottom: '12px' }}>👤</div>
+            <h2 style={{ margin: 0, color: '#fff', fontSize: '22px', fontWeight: 800 }}>{user.firstName} {user.lastName}</h2>
+            <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.75)', fontSize: '13px' }}>{user.roleType || 'Staff'}</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', color: '#fff', fontSize: '18px', lineHeight: 1 }}>✕</button>
+        </div>
+        <span style={{ display: 'inline-block', marginTop: '10px', padding: '3px 12px', borderRadius: '99px', fontSize: '12px', fontWeight: 700, background: user.status === 'APPROVED' ? 'rgba(16,185,129,0.25)' : user.status === 'PENDING' ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)', color: user.status === 'APPROVED' ? '#6ee7b7' : user.status === 'PENDING' ? '#fcd34d' : '#fca5a5' }}>
+          {user.status}
+        </span>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {[
+          { label: '📧 Email',       value: user.emailId      || '—' },
+          { label: '📱 Phone',       value: user.phoneNumber  || '—' },
+          { label: '⚧ Gender',      value: user.gender       || '—' },
+          { label: '💼 Position',    value: user.employmentType ? (user.employmentType === 'salaried' ? `Salaried — £${user.fixedSalary || 0}/mo` : `Contractual — £${user.hourlyRate || 0}/hr`) : 'Volunteer' },
+          { label: '🔧 Skills',      value: (user.skills || []).join(', ') || 'None' },
+        ].map(row => (
+          <div key={row.label} style={{ display: 'flex', gap: '12px', alignItems: 'baseline', paddingBottom: '10px', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700, minWidth: '110px' }}>{row.label}</span>
+            <span style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 600 }}>{row.value}</span>
+          </div>
+        ))}
+        <div style={{ paddingBottom: '10px', borderBottom: '1px solid var(--border)' }}>
+          <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700 }}>📅 Availability</span>
+          <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {(user.specificAvailability || []).filter((a: any) => a.isWorking).length === 0
+              ? <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No availability set</span>
+              : (user.specificAvailability || []).filter((a: any) => a.isWorking).map((a: any) => (
+                  <span key={a.date} style={{ fontSize: '11px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', color: '#818cf8', padding: '3px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                    {a.date} {a.startTime}–{a.endTime}
+                  </span>
+                ))
+            }
+          </div>
+        </div>
+        {(user.holidayDates || []).length > 0 && (
+          <div>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 700 }}>🏖️ Holiday Dates</span>
+            <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {user.holidayDates.map((d: string) => (
+                <span key={d} style={{ fontSize: '11px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '3px 8px', borderRadius: '6px', fontWeight: 600 }}>{d}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
 const StaffManagement = () => {
   const [activeTab, setActiveTab] = useState<'ASSIGNMENT' | 'DIRECTORY'>('ASSIGNMENT');
   const [users, setUsers] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingStaff, setEditingStaff] = useState<any | null>(null);
+  const [viewingStaff, setViewingStaff] = useState<any | null>(null);
 
   // Assignment Engine State
   const [fromDate, setFromDate] = useState(getMonday(new Date()));
@@ -521,7 +583,7 @@ const StaffManagement = () => {
           onClick={() => setActiveTab('DIRECTORY')}
           style={{ background: activeTab === 'DIRECTORY' ? 'var(--accent)' : 'transparent', color: activeTab === 'DIRECTORY' ? '#fff' : 'var(--text-primary)', border: 'none', padding: '10px 20px', fontWeight: activeTab === 'DIRECTORY' ? 700 : 500, borderRadius: '8px' }}
         >
-          Staff Directory & Approvals
+          Staff Info & Approvals
         </button>
       </div>
 
@@ -530,6 +592,12 @@ const StaffManagement = () => {
           user={editingStaff}
           onClose={() => setEditingStaff(null)}
           onSaved={fetchUsers}
+        />
+      )}
+      {viewingStaff && (
+        <ViewStaffModal
+          user={viewingStaff}
+          onClose={() => setViewingStaff(null)}
         />
       )}
 
@@ -752,7 +820,7 @@ const StaffManagement = () => {
         /* DIRECTORY & APPROVALS TAB */
         <div className="admin-table-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 className="section-title" style={{ marginBottom: 0 }}>Staff Directory & Approvals</h3>
+            <h3 className="section-title" style={{ marginBottom: 0 }}>👥 Staff Info &amp; Approvals</h3>
           </div>
           <div className="table-wrapper">
             <table className="admin-table">
@@ -780,6 +848,13 @@ const StaffManagement = () => {
                     </td>
                     <td>
                       <div className="action-buttons">
+                        <button
+                          onClick={() => setViewingStaff(u)}
+                          title="View staff details"
+                          style={{ fontSize: '13px', padding: '4px 10px', borderRadius: '6px', border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.08)', color: '#818cf8', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          👁 View
+                        </button>
                         <button
                           onClick={() => setEditingStaff(u)}
                           style={{ fontSize: '13px', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}

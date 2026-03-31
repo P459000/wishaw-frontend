@@ -31,7 +31,7 @@ const FamilyDashboardLayout = () => {
   const menuItems = [
     { label: '🏠 Dashboard', path: '/family/dashboard' },
     { label: '✏️ Edit Profile', path: '/family/dashboard/edit-profile' },
-    { label: '📅 Event Calendar', path: '/family/dashboard/calendar' },
+    { label: '📅 Calendar', path: '/family/dashboard/calendar' },
   ];
 
   const currentLabel = menuItems.find(i => i.path === location.pathname)?.label || 'Family Portal';
@@ -43,11 +43,13 @@ const FamilyDashboardLayout = () => {
 
       {/* Sidebar */}
       <aside className={`sidebar ${isMobileOpen ? 'mobile-open' : ''}`}>
-        <div className="sidebar-header">
-          <div className="auth-logo-icon" style={{ width: 32, height: 32, fontSize: 16, background: 'linear-gradient(135deg,#ec4899,#8b5cf6)' }}>
-            🧒
-          </div>
-          <span className="auth-logo-text" style={{ color: '#ec4899' }}>Family</span>
+        <div className="sidebar-header" style={{ gap: '10px' }}>
+          <img
+            src="/oyci-logo.png"
+            alt="OYCI"
+            style={{ height: '36px', width: 'auto', objectFit: 'contain', flexShrink: 0 }}
+          />
+          <span className="auth-logo-text" style={{ color: '#ec4899', fontSize: '13px', fontWeight: 800, letterSpacing: '0.03em' }}>Family Portal</span>
         </div>
 
         {/* Family info chip */}

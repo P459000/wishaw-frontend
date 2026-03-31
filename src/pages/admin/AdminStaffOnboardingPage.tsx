@@ -2,6 +2,90 @@ import React, { useState } from 'react';
 import API from '../../services/api';
 import axios from 'axios';
 
+// ── Custom Time Picker (12-hour AM/PM) ────────────────────────────────────────
+const HOURS_12 = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')); // 01–12
+const MINUTES  = ['00', '15', '30', '45'];
+
+// Convert 24h "HH:mm" → { h12, mm, ampm }
+const to12h = (val: string) => {
+  if (!val) return { h12: '09', mm: '00', ampm: 'AM' };
+  const [hhStr, mmStr] = val.split(':');
+  let hh = parseInt(hhStr, 10);
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  if (hh === 0) hh = 12;
+  else if (hh > 12) hh -= 12;
+  return { h12: String(hh).padStart(2, '0'), mm: mmStr || '00', ampm };
+};
+
+// Convert { h12, mm, ampm } → 24h "HH:mm"
+const to24h = (h12: string, mm: string, ampm: string) => {
+  let hh = parseInt(h12, 10);
+  if (ampm === 'AM' && hh === 12) hh = 0;
+  else if (ampm === 'PM' && hh !== 12) hh += 12;
+  return `${String(hh).padStart(2, '0')}:${mm}`;
+};
+
+const TimePicker: React.FC<{ value: string; onChange: (v: string) => void; disabled?: boolean }> = ({ value, onChange, disabled }) => {
+  const { h12, mm, ampm } = to12h(value);
+
+  const update = (field: 'h' | 'm' | 'p', v: string) => {
+    const newH = field === 'h' ? v : h12;
+    const newM = field === 'm' ? v : mm;
+    const newP = field === 'p' ? v : ampm;
+    onChange(to24h(newH, newM, newP));
+  };
+
+  const selStyle: React.CSSProperties = {
+    padding: '5px 6px',
+    borderRadius: '7px',
+    border: '1px solid var(--border)',
+    background: 'var(--bg-card)',
+    color: 'var(--text-primary)',
+    fontSize: '13px',
+    fontWeight: 700,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    outline: 'none',
+    minWidth: '48px',
+    textAlign: 'center',
+    appearance: 'none' as any,
+    WebkitAppearance: 'none' as any,
+  };
+
+  const ampmStyle = (active: boolean): React.CSSProperties => ({
+    padding: '4px 8px',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: 800,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    border: 'none',
+    background: active ? '#6366f1' : 'var(--bg-input)',
+    color: active ? '#fff' : 'var(--text-secondary)',
+    transition: 'all 0.15s',
+  });
+
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: '4px',
+      background: 'var(--bg-input)', border: '1px solid var(--border)',
+      borderRadius: '10px', padding: '4px 10px',
+      opacity: disabled ? 0.4 : 1,
+    }}>
+      <span style={{ fontSize: '13px' }}>🕐</span>
+      <select disabled={disabled} value={h12} onChange={e => update('h', e.target.value)} style={selStyle}>
+        {HOURS_12.map(h => <option key={h} value={h}>{h}</option>)}
+      </select>
+      <span style={{ fontWeight: 900, color: 'var(--text-secondary)', fontSize: '14px' }}>:</span>
+      <select disabled={disabled} value={mm} onChange={e => update('m', e.target.value)} style={selStyle}>
+        {MINUTES.map(m => <option key={m} value={m}>{m}</option>)}
+      </select>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginLeft: '2px' }}>
+        <button type="button" disabled={disabled} onClick={() => update('p', 'AM')} style={ampmStyle(ampm === 'AM')}>AM</button>
+        <button type="button" disabled={disabled} onClick={() => update('p', 'PM')} style={ampmStyle(ampm === 'PM')}>PM</button>
+      </div>
+    </div>
+  );
+};
+
 interface CreateStaffForm {
   firstName: string;
   lastName: string;
@@ -299,31 +383,52 @@ const AdminStaffOnboardingPage: React.FC = () => {
                    const isHoliday = form.holidayDates.includes(dateString);
 
                    return (
-                     <div key={dateString} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-card)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                       <div style={{ width: '100px' }}>
-                         <p style={{ margin: 0, fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>{displayDay}</p>
-                         <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)' }}>{displayDate}</p>
-                       </div>
-                       
-                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                           <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                             <input type="checkbox" checked={config.isWorking && !isHoliday} disabled={isHoliday} onChange={e => handleAvailabilityChange(dateString, 'isWorking', e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
-                             Working
-                           </label>
-                           <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '11px', color: isHoliday ? 'var(--error)' : 'var(--text-secondary)' }}>
-                             <input type="checkbox" checked={isHoliday} onChange={() => toggleHoliday(dateString)} style={{ accentColor: 'var(--error)' }} />
-                             Mark Holiday
-                           </label>
-                         </div>
+                      <div key={dateString} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        background: isHoliday ? 'rgba(239,68,68,0.05)' : config.isWorking ? 'rgba(34,197,94,0.04)' : 'var(--bg-card)',
+                        padding: '12px 16px', borderRadius: '10px',
+                        border: `1px solid ${isHoliday ? 'rgba(239,68,68,0.25)' : config.isWorking ? 'rgba(34,197,94,0.2)' : 'var(--border)'}`,
+                        transition: 'all 0.15s',
+                      }}>
+                        {/* Day label */}
+                        <div style={{ width: '95px', flexShrink: 0 }}>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: '13px', color: isHoliday ? '#ef4444' : 'var(--text-primary)' }}>{displayDay}</p>
+                          <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)' }}>{displayDate}</p>
+                        </div>
 
-                         <div style={{ display: 'flex', gap: '4px', opacity: (config.isWorking && !isHoliday) ? 1 : 0.3, pointerEvents: (config.isWorking && !isHoliday) ? 'auto' : 'none' }}>
-                           <input type="time" className="form-input" value={config.startTime} onChange={e => handleAvailabilityChange(dateString, 'startTime', e.target.value)} style={{ padding: '4px 6px', width: '90px', fontSize: '11px' }} />
-                           <span style={{ display: 'flex', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '11px' }}>to</span>
-                           <input type="time" className="form-input" value={config.endTime} onChange={e => handleAvailabilityChange(dateString, 'endTime', e.target.value)} style={{ padding: '4px 6px', width: '90px', fontSize: '11px' }} />
-                         </div>
-                       </div>
-                     </div>
+                        {/* Controls */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {/* Checkboxes */}
+                          <div style={{ display: 'flex', gap: '10px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                              <input type="checkbox" checked={config.isWorking && !isHoliday} disabled={isHoliday}
+                                onChange={e => handleAvailabilityChange(dateString, 'isWorking', e.target.checked)}
+                                style={{ accentColor: 'var(--accent)', width: '14px', height: '14px' }} />
+                              Working
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '12px', color: isHoliday ? '#ef4444' : 'var(--text-secondary)', fontWeight: 600 }}>
+                              <input type="checkbox" checked={isHoliday} onChange={() => toggleHoliday(dateString)}
+                                style={{ accentColor: '#ef4444', width: '14px', height: '14px' }} />
+                              Holiday
+                            </label>
+                          </div>
+
+                          {/* Time pickers */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: (config.isWorking && !isHoliday) ? 1 : 0.3, pointerEvents: (config.isWorking && !isHoliday) ? 'auto' : 'none', transition: 'opacity 0.15s' }}>
+                            <TimePicker
+                              value={config.startTime}
+                              onChange={v => handleAvailabilityChange(dateString, 'startTime', v)}
+                              disabled={!config.isWorking || isHoliday}
+                            />
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700 }}>→</span>
+                            <TimePicker
+                              value={config.endTime}
+                              onChange={v => handleAvailabilityChange(dateString, 'endTime', v)}
+                              disabled={!config.isWorking || isHoliday}
+                            />
+                          </div>
+                        </div>
+                      </div>
                    );
                  })}
               </div>

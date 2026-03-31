@@ -11,11 +11,16 @@ const toISO = (d: Date) => d.toISOString().split('T')[0];
 const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
 const getFirstDay   = (y: number, m: number) => new Date(y, m, 1).getDay();
 
+// Supports both single-date (e.date) and date-range (e.startDate/e.endDate) events
+const getEventDate = (e: any): string => e.date || e.startDate || '';
+
 const expandEventDates = (e: any): string[] => {
-  if (!e.startDate || !e.endDate) return [];
+  const start = e.startDate || e.date;
+  const end   = e.endDate   || e.date;
+  if (!start) return [];
   const dates: string[] = [];
-  const end = new Date(e.endDate);
-  for (let d = new Date(e.startDate); d <= end; d.setDate(d.getDate() + 1)) {
+  const endD = new Date(end);
+  for (let d = new Date(start); d <= endD; d.setDate(d.getDate() + 1)) {
     dates.push(toISO(new Date(d)));
   }
   return dates;
@@ -40,12 +45,21 @@ const FamilyEventCalendar = () => {
   const [viewYear, setViewYear]       = useState(today.getFullYear());
   const [viewMonth, setViewMonth]     = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [registering, setRegistering] = useState<string | null>(null); // event _id being toggled
   const panelRef = useRef<HTMLDivElement>(null);
+
+  const familyStr = localStorage.getItem('family');
+  const familyData = familyStr ? JSON.parse(familyStr) : null;
+  const myFamilyId = familyData?.familyId || '';
 
   const fetchEvents = () => {
     familyApi.get('/events/family')
-      .then(r => setEvents(r.data))
+      .then(r => {
+        // Only show events this child is onboarded to
+        const onboarded = r.data.filter((e: any) =>
+          (e.registeredFamilies || []).some((id: string) => id.toString() === myFamilyId)
+        );
+        setEvents(onboarded);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
@@ -73,47 +87,11 @@ const FamilyEventCalendar = () => {
 
   const selectedEvents = selectedDay ? (dateMap[selectedDay] || []) : [];
 
-  const studentId = (() => {
-    // We stored family object on login; but the _id from registration is studentId
-    // We need to get the actual student ObjectId — get from the token decode
-    // Actually we stored it as family.familyId but what we need is the mongo _id
-    // Let's parse the JWT to get the id
-    const token = localStorage.getItem('familyToken');
-    if (!token) return null;
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.id;
-    } catch { return null; }
-  })();
-
   const isRegistered = (event: any) => {
-    if (!studentId) return false;
-    return (event.registeredFamilies || []).some((id: string) => id === studentId);
+    if (!myFamilyId) return false;
+    return (event.registeredFamilies || []).some((id: string) => id === myFamilyId);
   };
 
-  const handleRegister = async (eventId: string) => {
-    setRegistering(eventId);
-    try {
-      await familyApi.post(`/events/${eventId}/register-family`);
-      fetchEvents(); // refresh
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to register');
-    } finally {
-      setRegistering(null);
-    }
-  };
-
-  const handleUnregister = async (eventId: string) => {
-    setRegistering(eventId);
-    try {
-      await familyApi.delete(`/events/${eventId}/register-family`);
-      fetchEvents();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to unregister');
-    } finally {
-      setRegistering(null);
-    }
-  };
 
   // ── Upcoming Events Logic ──
   const now = new Date();
@@ -135,22 +113,21 @@ const FamilyEventCalendar = () => {
   endNextWeek.setHours(23,59,59,999);
 
   const thisWeekEvents = events.filter(e => {
-    const d = new Date(e.startDate);
+    const d = new Date(getEventDate(e) + 'T12:00:00');
     return d >= startThisWeek && d <= endThisWeek;
-  }).sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+  }).sort((a, b) => new Date(getEventDate(a)).getTime() - new Date(getEventDate(b)).getTime());
 
   const nextWeekEvents = events.filter(e => {
-    const d = new Date(e.startDate);
+    const d = new Date(getEventDate(e) + 'T12:00:00');
     return d >= startNextWeek && d <= endNextWeek;
-  }).sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+  }).sort((a, b) => new Date(getEventDate(a)).getTime() - new Date(getEventDate(b)).getTime());
 
   // ── Render Event Card Helper ──
   const renderEventCard = (e: any, idx: number, listKey: string) => {
     const colorObj = PALETTE[e._colorIdx ?? (idx % PALETTE.length)];
     const { pill, bg } = colorObj;
     const registered = isRegistered(e);
-    const isWorking = registering === e._id;
-    const regCount = (e.registeredFamilies || []).length;
+    const staffList: any[] = e.assignedStaff || [];
 
     return (
       <div key={`${listKey}-${e._id}-${idx}`} style={{
@@ -170,7 +147,7 @@ const FamilyEventCalendar = () => {
             </h4>
             {registered && (
               <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: 700, background: 'rgba(34,197,94,0.12)', color: '#16a34a', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                ✓ Registered
+                ✓ Onboarded
               </span>
             )}
           </div>
@@ -183,10 +160,10 @@ const FamilyEventCalendar = () => {
           {/* Metadata chips */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
             {[
-              { icon: '🕐', label: `${e.startTime} - ${e.endTime}` },
-              { icon: '📅', label: `${e.startDate} ${e.endDate !== e.startDate ? `→ ${e.endDate}` : ''}` },
-              { icon: '👨‍👩‍👧', label: `${regCount} families registered` },
-            ].map(chip => (
+              e.date && { icon: '📅', label: e.date },
+              e.startTime && e.endTime && { icon: '🕐', label: `${e.startTime} – ${e.endTime}` },
+              e.sessionType && { icon: '🏷️', label: e.sessionType },
+            ].filter(Boolean).map((chip: any) => (
               <span key={chip.label} style={{
                 display: 'inline-flex', alignItems: 'center', gap: '3px',
                 padding: '3px 9px', borderRadius: '99px',
@@ -198,57 +175,55 @@ const FamilyEventCalendar = () => {
             ))}
           </div>
 
-          {/* Qualifications */}
-          {e.qualifications?.length > 0 && (
-            <div style={{ marginBottom: '14px' }}>
-              <p style={{ margin: '0 0 5px', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Event Activities
+          {/* Assigned Staff Section */}
+          {staffList.length > 0 && (
+            <div style={{ marginBottom: '14px', padding: '12px', background: 'var(--bg-input)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+              <p style={{ margin: '0 0 10px', fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                👥 Assigned Staff ({staffList.length})
               </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                {e.qualifications.map((q: string) => (
-                  <span key={q} style={{
-                    padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600,
-                    background: 'var(--bg-input)', color: 'var(--text-secondary)', border: '1px solid var(--border)',
-                  }}>{q}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {staffList.map((s: any) => (
+                  <div key={s._id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                    <div style={{
+                      width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
+                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '14px', fontWeight: 800, color: '#fff',
+                    }}>
+                      {(s.firstName?.[0] || '?').toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: '0 0 1px', fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {s.firstName} {s.lastName}
+                      </p>
+                      <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        {s.roleType || 'Staff'}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                      {s.phoneNumber && (
+                        <a href={`tel:${s.phoneNumber}`} style={{ fontSize: '11px', color: '#6366f1', fontWeight: 600, textDecoration: 'none' }}>
+                          📞 {s.phoneNumber}
+                        </a>
+                      )}
+                      {s.emailId && (
+                        <a href={`mailto:${s.emailId}`} style={{ fontSize: '11px', color: '#6366f1', fontWeight: 600, textDecoration: 'none' }}>
+                          ✉️ {s.emailId}
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Register / Unregister button */}
-          {registered ? (
-            <button
-              onClick={() => handleUnregister(e._id)}
-              disabled={isWorking}
-              style={{
-                width: '100%', padding: '9px', borderRadius: '10px',
-                border: '1px solid rgba(239,68,68,0.4)',
-                background: 'rgba(239,68,68,0.08)',
-                color: '#ef4444', fontWeight: 700, fontSize: '13px',
-                cursor: isWorking ? 'not-allowed' : 'pointer',
-                opacity: isWorking ? 0.6 : 1,
-                transition: 'all 0.15s',
-              }}
-            >
-              {isWorking ? 'Removing…' : '✕ Cancel Registration'}
-            </button>
-          ) : (
-            <button
-              onClick={() => handleRegister(e._id)}
-              disabled={isWorking}
-              style={{
-                width: '100%', padding: '9px', borderRadius: '10px',
-                border: 'none',
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: '#fff', fontWeight: 700, fontSize: '13px',
-                cursor: isWorking ? 'not-allowed' : 'pointer',
-                opacity: isWorking ? 0.6 : 1,
-                boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
-                transition: 'all 0.15s',
-              }}
-            >
-              {isWorking ? 'Registering…' : '✨ Register for this Event'}
-            </button>
+          {staffList.length === 0 && (
+            <div style={{ marginBottom: '14px', padding: '10px 12px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px dashed var(--border)' }}>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                👤 No staff assigned yet
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -403,7 +378,7 @@ const FamilyEventCalendar = () => {
           animation: 'slideInFromRight 0.22s cubic-bezier(0.16,1,0.3,1) both',
         }}>
            <div style={{ padding: '24px 20px 16px', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, background: 'var(--bg-input)', zIndex: 1 }}>
-             <h3 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)' }}>Upcoming Events</h3>
+             <h3 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)' }}>Calendar</h3>
              <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>Highlighting this week and next week.</p>
            </div>
            
